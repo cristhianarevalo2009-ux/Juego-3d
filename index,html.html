@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>EduRunner 3D - Aventura de Velocidad</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Montserrat', system-ui, -apple-system, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      background-color: #030712;
+    }
+    #game-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+    .neon-text-cyan {
+      text-shadow: 0 0 10px rgba(6, 182, 212, 0.7), 0 0 20px rgba(6, 182, 212, 0.4);
+    }
+    .neon-text-amber {
+      text-shadow: 0 0 10px rgba(245, 158, 11, 0.7), 0 0 20px rgba(245, 158, 11, 0.4);
+    }
+    .touch-btn {
+      background: rgba(255, 255, 255, 0.15);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      backdrop-filter: blur(8px);
+    }
+    .touch-btn:active {
+      background: rgba(56, 189, 248, 0.4);
+      transform: scale(0.92);
+    }
+    @keyframes pulse-gate {
+      0%, 100% { transform: scale(1); opacity: 0.9; }
+      50% { transform: scale(1.05); opacity: 1; }
+    }
+    .pulse-anim {
+      animation: pulse-gate 1.5s infinite ease-in-out;
+    }
+  </style>
+</head>
+<body class="relative w-full h-full text-white select-none">
+
+  <!-- Main 3D Canvas -->
+  <canvas id="game-canvas"></canvas>
+
+  <!-- Start Screen Modal -->
+  <div id="start-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md">
+    <div class="glass-panel max-w-md w-full rounded-3xl p-8 text-center border border-cyan-500/30 shadow-2xl relative overflow-hidden">
+      <div class="absolute -top-12 -right-12 w-32 h-32 bg-cyan-500/20 rounded-full blur-2xl pointer-events-none"></div>
+      <div class="absolute -bottom-12 -left-12 w-32 h-32 bg-amber-500/20 rounded-full blur-2xl pointer-events-none"></div>
+
+      <div class="w-20 h-20 bg-gradient-to-tr from-cyan-500 to-amber-400 rounded-3xl mx-auto flex items-center justify-center text-4xl shadow-lg shadow-cyan-500/30 mb-5 pulse-anim">
+        🚀
+      </div>
+
+      <h1 class="text-3xl font-black tracking-wider bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 via-amber-300 to-emerald-400 mb-2">
+        EDURUNNER 3D
+      </h1>
+      <p class="text-slate-300 text-sm mb-6 leading-relaxed">
+        ¡Corre a toda velocidad, esquiva obstáculos y atraviesa la puerta con la respuesta correcta para multiplicar tus puntos!
+      </p>
+
+      <div class="bg-slate-900/60 rounded-2xl p-4 mb-6 border border-slate-700/50 text-left space-y-2 text-xs text-slate-300">
+        <div class="flex items-center gap-2"><span class="text-amber-400 text-base">⬅️ ➡️</span> <span>Cambia de carril (Teclas A/D o Flechas)</span></div>
+        <div class="flex items-center gap-2"><span class="text-cyan-400 text-base">⬆️ / Espacio</span> <span>Salto alto con estela</span></div>
+        <div class="flex items-center gap-2"><span class="text-emerald-400 text-base">⬇️</span> <span>Deslizarse bajo barreras</span></div>
+        <div class="flex items-center gap-2"><span class="text-purple-400 text-base">⚡</span> <span>Power-ups: Escudo, Imán y Super Boost</span></div>
+      </div>
+
+      <button id="start-btn" class="w-full py-4 bg-gradient-to-r from-cyan-500 via-teal-400 to-emerald-500 hover:brightness-110 text-slate-950 font-black text-lg rounded-2xl transition-all transform active:scale-95 shadow-xl shadow-cyan-500/30 tracking-wider">
+        ¡INICIAR CARRERA!
+      </button>
+    </div>
+  </div>
+
+  <!-- HUD Overlay -->
+  <div id="hud" class="absolute top-0 left-0 w-full p-4 pointer-events-none flex flex-col gap-3 z-20 hidden">
+    <!-- Top Stats Row -->
+    <div class="flex justify-between items-center w-full">
+      <div class="flex items-center gap-3">
+        <!-- Health Bar -->
+        <div class="glass-panel px-3 py-2 rounded-2xl flex items-center gap-2 border border-slate-700">
+          <span class="text-lg">❤️</span>
+          <div class="w-24 h-3 bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700">
+            <div id="hp-bar" class="h-full bg-gradient-to-r from-rose-500 to-amber-400 rounded-full transition-all duration-300" style="width: 100%;"></div>
+          </div>
+        </div>
+
+        <!-- Score & Multiplier -->
+        <div class="glass-panel px-4 py-2 rounded-2xl flex items-center gap-3 border border-slate-700">
+          <div>
+            <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Puntuación</div>
+            <div id="score-val" class="text-xl font-black text-amber-400 neon-text-amber">0</div>
+          </div>
+          <div class="h-6 w-[1px] bg-slate-700"></div>
+          <div>
+            <div class="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Combo</div>
+            <div id="combo-val" class="text-lg font-bold text-cyan-400 neon-text-cyan">x1</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Coins & PowerUp Active Status -->
+      <div class="flex items-center gap-3">
+        <div id="powerup-badge" class="glass-panel px-3 py-2 rounded-2xl flex items-center gap-2 border border-purple-500/50 hidden">
+          <span id="powerup-icon" class="text-xl">🛡️</span>
+          <span id="powerup-timer" class="text-sm font-bold text-purple-300">5s</span>
+        </div>
+
+        <div class="glass-panel px-4 py-2 rounded-2xl flex items-center gap-2 border border-slate-700">
+          <span class="text-xl">🪙</span>
+          <span id="coins-val" class="text-xl font-black text-yellow-300">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Question Gate Bar -->
+    <div id="question-bar" class="self-center glass-panel px-6 py-3 rounded-2xl border border-cyan-500/50 text-center max-w-xl w-full transition-all duration-300 transform shadow-lg shadow-cyan-500/20">
+      <div class="text-xs font-semibold text-cyan-400 uppercase tracking-widest mb-0.5">¡Resuelve en la carrera!</div>
+      <div id="question-text" class="text-xl font-black text-white tracking-wide">Cargando desafío...</div>
+    </div>
+  </div>
+
+  <!-- Mobile Touch Controls -->
+  <div id="touch-controls" class="absolute bottom-6 left-4 right-4 flex justify-between items-end pointer-events-none z-20 md:hidden">
+    <!-- D-Pad Directional -->
+    <div class="flex gap-2 pointer-events-auto">
+      <button id="btn-left" class="touch-btn w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold">◀</button>
+      <button id="btn-right" class="touch-btn w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-bold">▶</button>
+    </div>
+    <!-- Actions -->
+    <div class="flex gap-2 pointer-events-auto">
+      <button id="btn-slide" class="touch-btn w-16 h-16 rounded-2xl flex items-center justify-center text-xs font-bold bg-amber-500/20 border-amber-400">DESLIZAR</button>
+      <button id="btn-jump" class="touch-btn w-16 h-16 rounded-2xl flex items-center justify-center text-xs font-bold bg-cyan-500/20 border-cyan-400">SALTAR</button>
+    </div>
+  </div>
+
+  <!-- Game Over Modal -->
+  <div id="gameover-modal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-lg hidden">
+    <div class="glass-panel max-w-md w-full rounded-3xl p-8 text-center border border-rose-500/30 shadow-2xl relative overflow-hidden">
+      <div id="gameover-icon" class="text-6xl mb-3">💥</div>
+      <h2 id="gameover-title" class="text-3xl font-black text-white mb-1">¡CARRERA TERMINADA!</h2>
+      <p id="gameover-subtitle" class="text-slate-400 text-sm mb-6">Demostraste grandes reflejos y conocimiento.</p>
+
+      <div class="grid grid-cols-2 gap-3 mb-6">
+        <div class="bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+          <div class="text-xs text-slate-400">Puntaje Final</div>
+          <div id="final-score" class="text-2xl font-black text-amber-400">0</div>
+        </div>
+        <div class="bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+          <div class="text-xs text-slate-400">Monedas</div>
+          <div id="final-coins" class="text-2xl font-black text-yellow-300">0</div>
+        </div>
+        <div class="bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+          <div class="text-xs text-slate-400">Aciertos</div>
+          <div id="final-correct" class="text-2xl font-black text-emerald-400">0</div>
+        </div>
+        <div class="bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+          <div class="text-xs text-slate-400">Mayor Combo</div>
+          <div id="final-combo" class="text-2xl font-black text-cyan-400">x1</div>
+        </div>
+      </div>
+
+      <button id="restart-btn" class="w-full py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:brightness-110 text-slate-950 font-black text-lg rounded-2xl transition-all transform active:scale-95 shadow-xl shadow-orange-500/20 tracking-wider">
+        REINTENTAR CARRERA 🔄
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // --- BANCO DE PREGUNTAS EDUCATIVAS ---
+    const QUESTION_BANK = [
+      { q: "¿Cuánto es 7 × 8?", options: ["56", "48", "64"], correct: 0 },
+      { q: "¿Símbolo químico del Oxígeno?", options: ["Ox", "O", "Ozg"], correct: 1 },
+      { q: "¿Cuánto es 120 ÷ 4?", options: ["25", "35", "30"], correct: 2 },
+      { q: "¿Cuál es el planeta más grande?", options: ["Júpiter", "Saturno", "Tierra"], correct: 0 },
+      { q: "¿Raíz cuadrada de 81?", options: ["8", "9", "7"], correct: 1 },
+      { q: "¿Órgano que bombea la sangre?", options: ["Pulmón", "Cerebro", "Corazón"], correct: 2 },
+      { q: "¿Resultado de (15 + 5) × 2?", options: ["40", "30", "50"], correct: 0 },
+      { q: "¿Gas que necesitan las plantas?", options: ["Oxígeno", "Dióxido de C.", "Nitrógeno"], correct: 1 },
+      { q: "¿Años en un siglo?", options: ["10", "1000", "100"], correct: 2 },
+      { q: "¿Fórmula del Agua?", options: ["H2O", "CO2", "NaCl"], correct: 0 }
+    ];
+
+    // --- SINTETIZADOR DE SONIDO Sfx (Web Audio API) ---
+    class SoundEffects {
+      constructor() {
+        this.ctx = null;
+      }
+      init() {
+        if (!this.ctx) {
+          this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+      }
+      playTone(freq, type = 'sine', duration = 0.1, gainVal = 0.1) {
+        if (!this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+          gain.gain.setValueAtTime(gainVal, this.ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + duration);
+        } catch(e) {}
+      }
+      jump() {
+        if (!this.ctx) return;
+        try {
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(250, this.ctx.currentTime);
+          osc.frequency.exponentialRampToValueAtTime(600, this.ctx.currentTime + 0.15);
+          gain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start();
+          osc.stop(this.ctx.currentTime + 0.15);
+        } catch(e) {}
+      }
+      coin() {
+        this.playTone(987.77, 'sine', 0.08, 0.1);
+        setTimeout(() => this.playTone(1318.51, 'sine', 0.12, 0.1), 60);
+      }
+      correct() {
+        this.playTone(523.25, 'triangle', 0.1, 0.15);
+        setTimeout(() => this.playTone(659.25, 'triangle', 0.1, 0.15), 80);
+        setTimeout(() => this.playTone(783.99, 'triangle', 0.2, 0.2), 160);
+      }
+      wrong() {
+        this.playTone(200, 'sawtooth', 0.15, 0.2);
+        setTimeout(() => this.playTone(140, 'sawtooth', 0.25, 0.2), 120);
+      }
+      powerup() {
+        this.playTone(400, 'sine', 0.1, 0.15);
+        setTimeout(() => this.playTone(600, 'sine', 0.1, 0.15), 70);
+        setTimeout(() => this.playTone(800, 'sine', 0.15, 0.15), 140);
+      }
+    }
+    const sfx = new SoundEffects();
+
+    // --- VARIABLES DE MOTOR DE JUEGO ---
+    let scene, camera, renderer;
+    let playerGroup, playerMesh, playerTrailParticles = [];
+    const LANES = [-3.2, 0, 3.2];
+    let currentLane = 1; // 0: Izq, 1: Centro, 2: Der
+    let targetX = 0;
+    
+    // Física del Jugador
+    let playerY = 0;
+    let jumpVelocity = 0;
+    let isJumping = false;
+    let isSliding = false;
+    let slideTimer = 0;
+
+    // Control de Carrera y Dificultad
+    let baseSpeed = 22;
+    let speed = baseSpeed;
+    let distanceRun = 0;
+    let isPlaying = false;
+    let health = 100;
+    let score = 0;
+    let coins = 0;
+    let combo = 1;
+    let maxCombo = 1;
+    let correctAnswersCount = 0;
+
+    // Power-Ups
+    let activePowerUp = null; // 'shield', 'magnet', 'boost'
+    let powerUpTimer = 0;
+
+    // Elementos del Mundo
+    let trackSegments = [];
+    let obstacles = [];
+    let coinObjects = [];
+    let powerUpObjects = [];
+    let activeGateGroup = null;
+    let activeQuestionData = null;
+    let particleExplosions = [];
+
+    // Tiempos e Intervalos de Spawning
+    let nextGateDistance = 80;
+    let nextObstacleDistance = 35;
+    let nextCoinDistance = 15;
+    let nextPowerUpDistance = 140;
+
+    // Controles Touch / Swipe
+    let touchStartX = 0, touchStartY = 0;
+
+    // --- INICIALIZACIÓN DE THREE.JS ---
+    function init() {
+      const container = document.getElementById('game-canvas');
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x050b14);
+      scene.fog = new THREE.FogExp2(0x050b14, 0.018);
+
+      camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 200);
+      camera.position.set(0, 4.5, 9);
+
+      renderer = new THREE.WebGLRenderer({ canvas: container, antialias: true, powerPreference: "high-performance" });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      // Iluminación Neon & Solar
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      scene.add(ambientLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.9);
+      dirLight.position.set(15, 30, 10);
+      dirLight.castShadow = true;
+      dirLight.shadow.mapSize.width = 1024;
+      dirLight.shadow.mapSize.height = 1024;
+      scene.add(dirLight);
+
+      // Luz puntual seguidora del personaje
+      const playerLight = new THREE.PointLight(0x06b6d4, 1.5, 15);
+      playerLight.position.set(0, 2, 0);
+      scene.add(playerLight);
+
+      buildPlayer();
+      buildInitialTrack();
+      setupInputListeners();
+
+      window.addEventListener('resize', onWindowResize);
+    }
+
+    // Personaje 3D (Robot / Bot Ágil con Neón)
+    function buildPlayer() {
+      playerGroup = new THREE.Group();
+
+      // Cuerpo Central
+      const bodyGeo = new THREE.BoxGeometry(0.9, 1.1, 0.7);
+      const bodyMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.2, metalness: 0.8 });
+      playerMesh = new THREE.Mesh(bodyGeo, bodyMat);
+      playerMesh.castShadow = true;
+      playerMesh.position.y = 0.85;
+
+      // Visor Brillantemente Iluminado
+      const visorGeo = new THREE.BoxGeometry(0.7, 0.3, 0.1);
+      const visorMat = new THREE.MeshBasicMaterial({ color: 0x06b6d4 });
+      const visor = new THREE.Mesh(visorGeo, visorMat);
+      visor.position.set(0, 0.25, 0.36);
+      playerMesh.add(visor);
+
+      // Núcleo del Pecho
+      const coreGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.1, 12);
+      const coreMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+      const core = new THREE.Mesh(coreGeo, coreMat);
+      core.rotation.x = Math.PI / 2;
+      core.position.set(0, 0.05, 0.36);
+      playerMesh.add(core);
+
+      // Jetpack Trasero
+      const packGeo = new THREE.BoxGeometry(0.6, 0.6, 0.3);
+      const packMat = new THREE.MeshStandardMaterial({ color: 0x334155, metalness: 0.9 });
+      const pack = new THREE.Mesh(packGeo, packMat);
+      pack.position.set(0, 0.1, -0.45);
+      playerMesh.add(pack);
+
+      playerGroup.add(playerMesh);
+      scene.add(playerGroup);
+    }
+
+    // Creación de Pista Modular
+    function createTrackSegment(zPos) {
+      const group = new THREE.Group();
+      group.position.z = zPos;
+
+      // Suelo Principal
+      const floorGeo = new THREE.BoxGeometry(11, 0.5, 30);
+      const floorMat = new THREE.MeshStandardMaterial({ color: 0x0f172a, roughness: 0.5 });
+      const floor = new THREE.Mesh(floorGeo, floorMat);
+      floor.position.y = -0.25;
+      floor.receiveShadow = true;
+      group.add(floor);
+
+      // Líneas Neón Divisorias de Carril
+      [-1.6, 1.6].forEach(x => {
+        const lineGeo = new THREE.BoxGeometry(0.1, 0.02, 30);
+        const lineMat = new THREE.MeshBasicMaterial({ color: 0x1e293b });
+        const line = new THREE.Mesh(lineGeo, lineMat);
+        line.position.set(x, 0.01, 0);
+        group.add(line);
+      });
+
+      // Bordes Laterales Luminosos
+      [-5.3, 5.3].forEach(x => {
+        const borderGeo = new THREE.BoxGeometry(0.3, 0.4, 30);
+        const borderMat = new THREE.MeshBasicMaterial({ color: 0x0284c7 });
+        const border = new THREE.Mesh(borderGeo, borderMat);
+        border.position.set(x, 0.1, 0);
+        group.add(border);
+      });
+
+      scene.add(group);
+      trackSegments.push(group);
+    }
+
+    function buildInitialTrack() {
+      for (let i = 0; i < 6; i++) {
+        createTrackSegment(-i * 30);
+      }
+    }
+
+    // --- GENERACIÓN DE ELEMENTOS Y DINÁMICA ---
+    function spawnObstacle(z) {
+      const lane = LANES[Math.floor(Math.random() * 3)];
+      const isHighBarrier = Math.random() > 0.6; // Alta para deslizarse por debajo, o baja para saltar
+
+      const group = new THREE.Group();
+      group.position.set(lane, 0, z);
+
+      if (isHighBarrier) {
+        // Obstáculo Elevado (Deslizarse)
+        const frameGeo = new THREE.BoxGeometry(2.8, 0.3, 0.4);
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.3 });
+        const topBar = new THREE.Mesh(frameGeo, frameMat);
+        topBar.position.y = 1.9;
+        topBar.castShadow = true;
+
+        const legGeo = new THREE.CylinderGeometry(0.1, 0.1, 1.9);
+        const leg1 = new THREE.Mesh(legGeo, frameMat);
+        const leg2 = leg1.clone();
+        leg1.position.set(-1.3, 0.95, 0);
+        leg2.position.set(1.3, 0.95, 0);
+
+        group.add(topBar, leg1, leg2);
+        group.userData = { type: 'barrier_high', bounds: { w: 2.5, h: 0.8, yMin: 1.2 } };
+      } else {
+        // Obstáculo Bajo (Saltar)
+        const geo = new THREE.BoxGeometry(2.6, 1.0, 0.8);
+        const mat = new THREE.MeshStandardMaterial({ color: 0xf43f5e, roughness: 0.3, metalness: 0.2 });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.y = 0.5;
+        mesh.castShadow = true;
+        group.add(mesh);
+        group.userData = { type: 'barrier_low', bounds: { w: 2.5, h: 1.0, yMin: 0 } };
+      }
+
+      scene.add(group);
+      obstacles.push(group);
+    }
+
+    function spawnCoin(z) {
+      const lane = LANES[Math.floor(Math.random() * 3)];
+      for (let i = 0; i < 3; i++) {
+        const coinGeo = new THREE.CylinderGeometry(0.35, 0.35, 0.1, 12);
+        const coinMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, metalness: 0.9, roughness: 0.1 });
+        const coin = new THREE.Mesh(coinGeo, coinMat);
+        coin.rotation.x = Math.PI / 2;
+        coin.position.set(lane, 0.8, z - (i * 2.2));
+        coin.castShadow = true;
+        scene.add(coin);
+        coinObjects.push(coin);
+      }
+    }
+
+    function spawnPowerUp(z) {
+      const lane = LANES[Math.floor(Math.random() * 3)];
+      const types = ['shield', 'magnet', 'boost'];
+      const chosenType = types[Math.floor(Math.random() * types.length)];
+
+      const geo = new THREE.OctahedronGeometry(0.5, 0);
+      let color = 0xa855f7; // Shield
+      if (chosenType === 'magnet') color = 0xeab308;
+      if (chosenType === 'boost') color = 0x06b6d4;
+
+      const mat = new THREE.MeshStandardMaterial({ color: color, emissive: color, emissiveIntensity: 0.5, roughness: 0.1 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(lane, 1.1, z);
+      mesh.userData = { type: chosenType };
+      scene.add(mesh);
+      powerUpObjects.push(mesh);
+    }
+
+    // Puerta de Pregunta Educativa (3 Carriles con Respuestas)
+    function spawnQuestionGate(z) {
+      if (activeGateGroup) return; // Solo una puerta activa a la vez
+
+      const qIndex = Math.floor(Math.random() * QUESTION_BANK.length);
+      activeQuestionData = QUESTION_BANK[qIndex];
+
+      // Actualizar Texto en HUD
+      document.getElementById('question-text').textContent = activeQuestionData.q;
+
+      const gateGroup = new THREE.Group();
+      gateGroup.position.z = z;
+
+      // Crear 3 marcos para cada carril
+      LANES.forEach((xPos, idx) => {
+        const isCorrect = (idx === activeQuestionData.correct);
+        const answerText = activeQuestionData.options[idx];
+
+        const frameGeo = new THREE.TorusGeometry(1.3, 0.12, 8, 20);
+        const frameMat = new THREE.MeshStandardMaterial({
+          color: 0x38bdf8,
+          emissive: 0x0284c7,
+          emissiveIntensity: 0.4
+        });
+        const frame = new THREE.Mesh(frameGeo, frameMat);
+        frame.position.set(xPos, 1.5, 0);
+
+        // Canvas 2D renderizado como textura para mostrar la respuesta
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 128;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, 256, 128);
+        ctx.lineWidth = 8;
+        ctx.strokeStyle = '#38bdf8';
+        ctx.strokeRect(0, 0, 256, 128);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 36px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(answerText, 128, 64);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const planeGeo = new THREE.PlaneGeometry(2.0, 1.0);
+        const planeMat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.95 });
+        const plane = new THREE.Mesh(planeGeo, planeMat);
+        plane.position.set(xPos, 1.5, 0);
+
+        gateGroup.add(frame, plane);
+      });
+
+      gateGroup.userData = {
+        correctIndex: activeQuestionData.correct,
+        passed: false
+      };
+
+      scene.add(gateGroup);
+      activeGateGroup = gateGroup;
+    }
+
+    // EFECTO DE EXPLOSIÓN DE PARTÍCULAS
+    function triggerParticleBurst(x, y, z, colorHex) {
+      for (let i = 0; i < 20; i++) {
+        const pGeo = new THREE.BoxGeometry(0.15, 0.15, 0.15);
+        const pMat = new THREE.MeshBasicMaterial({ color: colorHex });
+        const p = new THREE.Mesh(pGeo, pMat);
+        p.position.set(x, y, z);
+        p.userData = {
+          vx: (Math.random() - 0.5) * 12,
+          vy: Math.random() * 8 + 2,
+          vz: (Math.random() - 0.5) * 12,
+          life: 0.6
+        };
+        scene.add(p);
+        particleExplosions.push(p);
+      }
+    }
+
+    // --- CONTROLES DE ENTRADA (Teclado y Touch) ---
+    function setupInputListeners() {
+      window.addEventListener('keydown', (e) => {
+        if (!isPlaying) return;
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') moveLane(-1);
+        if (e.code === 'ArrowRight' || e.code === 'KeyD') moveLane(1);
+        if ((e.code === 'ArrowUp' || e.code === 'Space' || e.code === 'KeyW') && !isJumping) doJump();
+        if ((e.code === 'ArrowDown' || e.code === 'KeyS') && !isSliding) doSlide();
+      });
+
+      // Gestos Táctiles (Swipe)
+      window.addEventListener('touchstart', (e) => {
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+      });
+
+      window.addEventListener('touchend', (e) => {
+        if (!isPlaying) return;
+        const diffX = e.changedTouches[0].clientX - touchStartX;
+        const diffY = e.changedTouches[0].clientY - touchStartY;
+
+        if (Math.abs(diffX) > Math.abs(diffY)) {
+          if (diffX > 30) moveLane(1);
+          else if (diffX < -30) moveLane(-1);
+        } else {
+          if (diffY < -30 && !isJumping) doJump();
+          else if (diffY > 30 && !isSliding) doSlide();
+        }
+      });
+
+      // Botones táctiles en pantalla
+      document.getElementById('btn-left').onclick = () => moveLane(-1);
+      document.getElementById('btn-right').onclick = () => moveLane(1);
+      document.getElementById('btn-jump').onclick = () => { if (!isJumping) doJump(); };
+      document.getElementById('btn-slide').onclick = () => { if (!isSliding) doSlide(); };
+
+      // Iniciar / Reiniciar
+      document.getElementById('start-btn').onclick = startGame;
+      document.getElementById('restart-btn').onclick = startGame;
+    }
+
+    function moveLane(dir) {
+      currentLane = Math.max(0, Math.min(2, currentLane + dir));
+      targetX = LANES[currentLane];
+    }
+
+    function doJump() {
+      isJumping = true;
+      jumpVelocity = 14;
+      sfx.jump();
+    }
+
+    function doSlide() {
+      isSliding = true;
+      slideTimer = 0.6; // Duración del deslizamiento
+      playerMesh.scale.set(1, 0.4, 1);
+      playerMesh.position.y = 0.35;
+    }
+
+    function resetSlide() {
+      isSliding = false;
+      playerMesh.scale.set(1, 1, 1);
+      playerMesh.position.y = 0.85;
+    }
+
+    // --- CICLO PRINCIPAL DE JUEGO ---
+    let clock = new THREE.Clock();
+
+    function startGame() {
+      sfx.init();
+      document.getElementById('start-modal').classList.add('hidden');
+      document.getElementById('gameover-modal').classList.add('hidden');
+      document.getElementById('hud').classList.remove('hidden');
+
+      // Limpieza de objetos anteriores
+      obstacles.forEach(o => scene.remove(o));
+      coinObjects.forEach(c => scene.remove(c));
+      powerUpObjects.forEach(p => scene.remove(p));
+      particleExplosions.forEach(p => scene.remove(p));
+      if (activeGateGroup) scene.remove(activeGateGroup);
+
+      obstacles = [];
+      coinObjects = [];
+      powerUpObjects = [];
+      particleExplosions = [];
+      activeGateGroup = null;
+
+      // Restablecer estados
+      currentLane = 1;
+      targetX = LANES[1];
+      playerGroup.position.set(0, 0, 0);
+      health = 100;
+      score = 0;
+      coins = 0;
+      combo = 1;
+      maxCombo = 1;
+      correctAnswersCount = 0;
+      distanceRun = 0;
+      speed = baseSpeed;
+      activePowerUp = null;
+      powerUpTimer = 0;
+      resetSlide();
+
+      updateHUD();
+      isPlaying = true;
+      clock.start();
+    }
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const delta = clock.getDelta();
+
+      if (isPlaying) {
+        updateGameplay(delta);
+      }
+
+      // Animaciones constantes y render
+      renderer.render(scene, camera);
+    }
+
+    function updateGameplay(delta) {
+      // 1. Movimiento del Jugador y Física
+      distanceRun += speed * delta;
+      score += Math.floor(speed * delta * combo);
+
+      // Transición suave entre carriles
+      playerGroup.position.x += (targetX - playerGroup.position.x) * 15 * delta;
+
+      // Salto
+      if (isJumping) {
+        playerY += jumpVelocity * delta;
+        jumpVelocity -= 36 * delta; // Gravedad
+        if (playerY <= 0) {
+          playerY = 0;
+          isJumping = false;
+        }
+      }
+      playerGroup.position.y = playerY;
+
+      // Deslizamiento
+      if (isSliding) {
+        slideTimer -= delta;
+        if (slideTimer <= 0) {
+          resetSlide();
+        }
+      }
+
+      // 2. Control de Power-Up
+      if (activePowerUp) {
+        powerUpTimer -= delta;
+        document.getElementById('powerup-timer').textContent = `${Math.ceil(powerUpTimer)}s`;
+        if (powerUpTimer <= 0) {
+          activePowerUp = null;
+          document.getElementById('powerup-badge').classList.add('hidden');
+        }
+      }
+
+      // 3. Mover Pista Modular infinitamente
+      trackSegments.forEach(seg => {
+        seg.position.z += speed * delta;
+        if (seg.position.z > 15) {
+          seg.position.z -= 180; // Reciclar al fondo
+        }
+      });
+
+      // 4. Generación Dinámica de Elementos
+      if (distanceRun > nextObstacleDistance) {
+        spawnObstacle(-120);
+        nextObstacleDistance = distanceRun + Math.random() * 25 + 20;
+      }
+
+      if (distanceRun > nextCoinDistance) {
+        spawnCoin(-120);
+        nextCoinDistance = distanceRun + Math.random() * 15 + 15;
+      }
+
+      if (distanceRun > nextPowerUpDistance) {
+        spawnPowerUp(-120);
+        nextPowerUpDistance = distanceRun + 160 + Math.random() * 100;
+      }
+
+      if (distanceRun > nextGateDistance && !activeGateGroup) {
+        spawnQuestionGate(-130);
+        nextGateDistance = distanceRun + 120;
+      }
+
+      // 5. Mover y Procesar Obstáculos
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obs = obstacles[i];
+        obs.position.z += speed * delta;
+
+        // Detección de Colisión
+        if (Math.abs(obs.position.z - playerGroup.position.z) < 1.2 &&
+            Math.abs(obs.position.x - playerGroup.position.x) < 1.0) {
+          
+          let hit = false;
+          if (obs.userData.type === 'barrier_low' && playerY < 0.8) hit = true;
+          if (obs.userData.type === 'barrier_high' && !isSliding) hit = true;
+
+          if (hit) {
+            if (activePowerUp === 'shield') {
+              activePowerUp = null;
+              document.getElementById('powerup-badge').classList.add('hidden');
+              triggerParticleBurst(obs.position.x, 1, obs.position.z, 0xa855f7);
+              sfx.correct();
+            } else {
+              health -= 30;
+              combo = 1;
+              sfx.wrong();
+              triggerParticleBurst(obs.position.x, 1, obs.position.z, 0xf43f5e);
+            }
+            scene.remove(obs);
+            obstacles.splice(i, 1);
+            updateHUD();
+
+            if (health <= 0) {
+              gameOver();
+              return;
+            }
+            continue;
+          }
+        }
+
+        if (obs.position.z > 10) {
+          scene.remove(obs);
+          obstacles.splice(i, 1);
+        }
+      }
+
+      // 6. Mover y Recoger Monedas
+      for (let i = coinObjects.length - 1; i >= 0; i--) {
+        const coin = coinObjects[i];
+        coin.position.z += speed * delta;
+        coin.rotation.z += 3 * delta;
+
+        // Efecto Imán
+        if (activePowerUp === 'magnet' && coin.position.z > -30) {
+          coin.position.x += (playerGroup.position.x - coin.position.x) * 8 * delta;
+          coin.position.y += (playerGroup.position.y + 0.8 - coin.position.y) * 8 * delta;
+        }
+
+        if (playerGroup.position.distanceTo(coin.position) < 1.4) {
+          coins++;
+          score += 50 * combo;
+          sfx.coin();
+          triggerParticleBurst(coin.position.x, coin.position.y, coin.position.z, 0xfacc15);
+          scene.remove(coin);
+          coinObjects.splice(i, 1);
+          updateHUD();
+          continue;
+        }
+
+        if (coin.position.z > 10) {
+          scene.remove(coin);
+          coinObjects.splice(i, 1);
+        }
+      }
+
+      // 7. Power-Ups
+      for (let i = powerUpObjects.length - 1; i >= 0; i--) {
+        const p = powerUpObjects[i];
+        p.position.z += speed * delta;
+        p.rotation.y += 2 * delta;
+
+        if (playerGroup.position.distanceTo(p.position) < 1.5) {
+          activePowerUp = p.userData.type;
+          powerUpTimer = 7.0;
+          sfx.powerup();
+
+          const badge = document.getElementById('powerup-badge');
+          badge.classList.remove('hidden');
+          const icon = document.getElementById('powerup-icon');
+          if (activePowerUp === 'shield') icon.textContent = '🛡️';
+          if (activePowerUp === 'magnet') icon.textContent = '🧲';
+          if (activePowerUp === 'boost') {
+            icon.textContent = '⚡';
+            speed = baseSpeed * 1.5;
+          }
+
+          triggerParticleBurst(p.position.x, p.position.y, p.position.z, 0xa855f7);
+          scene.remove(p);
+          powerUpObjects.splice(i, 1);
+          continue;
+        }
+
+        if (p.position.z > 10) {
+          scene.remove(p);
+          powerUpObjects.splice(i, 1);
+        }
+      }
+
+      // Restablecer velocidad normal si termina Super Boost
+      if (activePowerUp !== 'boost' && speed > baseSpeed) {
+        speed = baseSpeed;
+      }
+
+      // 8. Detección de Respuestas en Puerta Educativa
+      if (activeGateGroup) {
+        activeGateGroup.position.z += speed * delta;
+
+        if (activeGateGroup.position.z > -1.0 && !activeGateGroup.userData.passed) {
+          activeGateGroup.userData.passed = true;
+
+          const chosenLane = currentLane;
+          const isCorrect = (chosenLane === activeGateGroup.userData.correctIndex) || (activePowerUp === 'boost');
+
+          if (isCorrect) {
+            combo++;
+            if (combo > maxCombo) maxCombo = combo;
+            correctAnswersCount++;
+            score += 500 * combo;
+            sfx.correct();
+            triggerParticleBurst(LANES[chosenLane], 1.5, activeGateGroup.position.z, 0x10b981);
+            if (health < 100) health = Math.min(100, health + 15);
+          } else {
+            combo = 1;
+            health -= 25;
+            sfx.wrong();
+            triggerParticleBurst(LANES[chosenLane], 1.5, activeGateGroup.position.z, 0xf43f5e);
+          }
+
+          updateHUD();
+
+          if (health <= 0) {
+            gameOver();
+            return;
+          }
+        }
+
+        if (activeGateGroup.position.z > 10) {
+          scene.remove(activeGateGroup);
+          activeGateGroup = null;
+          document.getElementById('question-text').textContent = '¡Sigue corriendo!';
+        }
+      }
+
+      // 9. Actualizar Partículas
+      for (let i = particleExplosions.length - 1; i >= 0; i--) {
+        const p = particleExplosions[i];
+        p.position.x += p.userData.vx * delta;
+        p.position.y += p.userData.vy * delta;
+        p.position.z += p.userData.vz * delta;
+        p.userData.vy -= 15 * delta; // Gravedad
+        p.userData.life -= delta;
+
+        if (p.userData.life <= 0) {
+          scene.remove(p);
+          particleExplosions.splice(i, 1);
+        }
+      }
+    }
+
+    function updateHUD() {
+      document.getElementById('hp-bar').style.width = `${Math.max(0, health)}%`;
+      document.getElementById('score-val').textContent = score;
+      document.getElementById('coins-val').textContent = coins;
+      document.getElementById('combo-val').textContent = `x${combo}`;
+    }
+
+    function gameOver() {
+      isPlaying = false;
+      document.getElementById('hud').classList.add('hidden');
+      document.getElementById('gameover-modal').classList.remove('hidden');
+
+      document.getElementById('final-score').textContent = score;
+      document.getElementById('final-coins').textContent = coins;
+      document.getElementById('final-correct').textContent = correctAnswersCount;
+      document.getElementById('final-combo').textContent = `x${maxCombo}`;
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // Iniciar Bucle
+    init();
+    animate();
+  </script>
+</body>
+</html>
